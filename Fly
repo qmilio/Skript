@@ -1,0 +1,261 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+---------------------------------------------------
+-- CHARACTER
+---------------------------------------------------
+
+local character = player.Character or player.CharacterAdded:Wait()
+local root = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
+
+---------------------------------------------------
+-- SETTINGS
+---------------------------------------------------
+
+local flySpeed = 50
+local flying = false
+local minimized = false
+local flyBind = Enum.KeyCode.F
+local waitingForBind = false
+
+---------------------------------------------------
+-- UI
+---------------------------------------------------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "FlyGUI"
+gui.ResetOnSpawn = false -- 🔥 ВАЖНО
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0,260,0,320)
+mainFrame.Position = UDim2.new(0.03,0,0.3,0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = gui
+mainFrame.Active = true
+mainFrame.Draggable = true
+
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0,18)
+
+---------------------------------------------------
+-- HEADER
+---------------------------------------------------
+
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1,0,0,40)
+header.BackgroundTransparency = 1
+header.Parent = mainFrame
+
+local minimizeButton = Instance.new("TextButton")
+minimizeButton.Size = UDim2.new(0,30,0,30)
+minimizeButton.Position = UDim2.new(1,-35,0,5)
+minimizeButton.BackgroundColor3 = Color3.fromRGB(60,60,60)
+minimizeButton.TextColor3 = Color3.new(1,1,1)
+minimizeButton.Text = "–"
+minimizeButton.Parent = header
+Instance.new("UICorner", minimizeButton).CornerRadius = UDim.new(1,0)
+
+---------------------------------------------------
+-- CONTENT
+---------------------------------------------------
+
+local contentFrame = Instance.new("Frame")
+contentFrame.Size = UDim2.new(1,0,1,-40)
+contentFrame.Position = UDim2.new(0,0,0,40)
+contentFrame.BackgroundTransparency = 1
+contentFrame.Parent = mainFrame
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0,8)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = contentFrame
+
+local function createButton(text)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(0.9,0,0,35)
+	b.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	b.TextColor3 = Color3.new(1,1,1)
+	b.TextScaled = true
+	b.Text = text
+	b.Parent = contentFrame
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0,12)
+	return b
+end
+
+local toggleButton = createButton("FLY: OFF")
+
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(0.9,0,0,30)
+speedLabel.BackgroundTransparency = 1
+speedLabel.TextColor3 = Color3.new(1,1,1)
+speedLabel.TextScaled = true
+speedLabel.Text = "Speed: 50"
+speedLabel.Parent = contentFrame
+
+local plusButton = createButton("+ Speed")
+local minusButton = createButton("- Speed")
+local bindButton = createButton("Bind: F")
+local closeButton = createButton("Завершить")
+closeButton.BackgroundColor3 = Color3.fromRGB(70,20,20)
+
+---------------------------------------------------
+-- FLY LOGIC
+---------------------------------------------------
+
+local function startFly()
+	if flying then return end
+	flying = true
+	if root then
+		root.Anchored = true
+	end
+	if humanoid then
+		humanoid.AutoRotate = false
+	end
+end
+
+local function stopFly()
+	flying = false
+	if root then
+		root.Anchored = false
+	end
+	if humanoid then
+		humanoid.AutoRotate = true
+	end
+end
+
+toggleButton.MouseButton1Click:Connect(function()
+	if flying then
+		stopFly()
+		toggleButton.Text = "FLY: OFF"
+	else
+		startFly()
+		toggleButton.Text = "FLY: ON"
+	end
+end)
+
+plusButton.MouseButton1Click:Connect(function()
+	flySpeed = math.clamp(flySpeed + 50,10,1000)
+	speedLabel.Text = "Speed: "..flySpeed
+end)
+
+minusButton.MouseButton1Click:Connect(function()
+	flySpeed = math.clamp(flySpeed - 50,10,1000)
+	speedLabel.Text = "Speed: "..flySpeed
+end)
+
+---------------------------------------------------
+-- MINIMIZE
+---------------------------------------------------
+
+local expandedSize = UDim2.new(0,260,0,320)
+local collapsedSize = UDim2.new(0,260,0,45)
+
+minimizeButton.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	
+	if minimized then
+		contentFrame.Visible = false
+		mainFrame:TweenSize(collapsedSize, Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.35, true)
+		minimizeButton.Text = "+"
+	else
+		mainFrame:TweenSize(expandedSize, Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.35, true)
+		task.wait(0.35)
+		contentFrame.Visible = true
+		minimizeButton.Text = "–"
+	end
+end)
+
+---------------------------------------------------
+-- CLOSE
+---------------------------------------------------
+
+closeButton.MouseButton1Click:Connect(function()
+	stopFly()
+	gui:Destroy()
+end)
+
+---------------------------------------------------
+-- MOVEMENT
+---------------------------------------------------
+
+RunService.RenderStepped:Connect(function(dt)
+	if flying and root then
+		local move = Vector3.zero
+		
+		local camera = workspace.CurrentCamera
+		
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+			move += camera.CFrame.LookVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+			move -= camera.CFrame.LookVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+			move -= camera.CFrame.RightVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+			move += camera.CFrame.RightVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+			move += Vector3.new(0,1,0)
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+			move -= Vector3.new(0,1,0)
+		end
+		
+		if move.Magnitude > 0 then
+			root.CFrame += move.Unit * flySpeed * dt
+		end
+	end
+end)
+
+---------------------------------------------------
+-- REBIND
+---------------------------------------------------
+
+bindButton.MouseButton1Click:Connect(function()
+	waitingForBind = true
+	bindButton.Text = "Press key..."
+end)
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if gpe then return end
+	
+	if waitingForBind and input.UserInputType == Enum.UserInputType.Keyboard then
+		flyBind = input.KeyCode
+		bindButton.Text = "Bind: "..flyBind.Name
+		waitingForBind = false
+		return
+	end
+	
+	if input.KeyCode == flyBind then
+		if flying then
+			stopFly()
+			toggleButton.Text = "FLY: OFF"
+		else
+			startFly()
+			toggleButton.Text = "FLY: ON"
+		end
+	end
+end)
+
+---------------------------------------------------
+-- CHARACTER RESPAWN FIX
+---------------------------------------------------
+
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+	root = char:WaitForChild("HumanoidRootPart")
+
+	if flying then
+		task.wait(0.1)
+		startFly()
+	end
+end)
