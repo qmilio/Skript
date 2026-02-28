@@ -1,0 +1,186 @@
+--// SERVICES
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--// GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ESP_Menu"
+ScreenGui.Parent = CoreGui
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 200, 0, 120)
+Frame.Position = UDim2.new(0.5, -100, 0.5, -60)
+Frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Frame.BorderSizePixel = 0
+Frame.Parent = ScreenGui
+
+local FrameCorner = Instance.new("UICorner")
+FrameCorner.CornerRadius = UDim.new(0, 25)
+FrameCorner.Parent = Frame
+
+--// DRAG SYSTEM
+local dragging = false
+local dragInput
+local dragStart
+local startPos
+
+Frame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = Frame.Position
+		
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+Frame.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		Frame.Position = UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset + delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset + delta.Y
+		)
+	end
+end)
+
+--// ESP BUTTON
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(1, -20, 0, 40)
+ToggleButton.Position = UDim2.new(0, 10, 0, 10)
+ToggleButton.Text = "ESP: OFF"
+ToggleButton.BackgroundColor3 = Color3.fromRGB(60,60,60)
+ToggleButton.TextColor3 = Color3.new(1,1,1)
+ToggleButton.BorderSizePixel = 0
+ToggleButton.Parent = Frame
+
+Instance.new("UICorner", ToggleButton).CornerRadius = UDim.new(0,20)
+
+--// CLOSE BUTTON
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(1, -20, 0, 40)
+CloseButton.Position = UDim2.new(0, 10, 0, 60)
+CloseButton.Text = "ЗАВЕРШИТЬ"
+CloseButton.BackgroundColor3 = Color3.fromRGB(120,40,40)
+CloseButton.TextColor3 = Color3.new(1,1,1)
+CloseButton.BorderSizePixel = 0
+CloseButton.Parent = Frame
+
+Instance.new("UICorner", CloseButton).CornerRadius = UDim.new(0,20)
+
+--// VARIABLES
+local espEnabled = false
+local highlights = {}
+local connections = {}
+
+--// CHECK VISIBILITY
+local function isVisible(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return false end
+	
+	local origin = Camera.CFrame.Position
+	local direction = root.Position - origin
+	
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+	rayParams.FilterDescendantsInstances = {player.Character}
+	rayParams.IgnoreWater = true
+	
+	local result = workspace:Raycast(origin, direction, rayParams)
+	
+	if result and result.Instance:IsDescendantOf(character) then
+		return true
+	end
+	
+	return false
+end
+
+--// ADD HIGHLIGHT
+local function addHighlight(character)
+	if character and not highlights[character] then
+		
+		local highlight = Instance.new("Highlight")
+		highlight.FillTransparency = 0.5
+		highlight.OutlineColor = Color3.fromRGB(255,255,255)
+		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		highlight.Parent = character
+		
+		highlights[character] = highlight
+		
+		connections[character] = RunService.RenderStepped:Connect(function()
+			if not espEnabled then return end
+			if not character.Parent then return end
+			
+			if isVisible(character) then
+				highlight.FillColor = Color3.fromRGB(0,255,0)
+			else
+				highlight.FillColor = Color3.fromRGB(255,0,0)
+			end
+		end)
+	end
+end
+
+--// REMOVE ALL
+local function removeAllHighlights()
+	for _, highlight in pairs(highlights) do
+		highlight:Destroy()
+	end
+	
+	for _, conn in pairs(connections) do
+		conn:Disconnect()
+	end
+	
+	highlights = {}
+	connections = {}
+end
+
+--// TOGGLE
+ToggleButton.MouseButton1Click:Connect(function()
+	espEnabled = not espEnabled
+	
+	if espEnabled then
+		ToggleButton.Text = "ESP: ON"
+		
+		for _, plr in pairs(Players:GetPlayers()) do
+			if plr ~= player and plr.Character then
+				addHighlight(plr.Character)
+			end
+		end
+	else
+		ToggleButton.Text = "ESP: OFF"
+		removeAllHighlights()
+	end
+end)
+
+--// PLAYER JOIN
+Players.PlayerAdded:Connect(function(plr)
+	plr.CharacterAdded:Connect(function(char)
+		if espEnabled and plr ~= player then
+			addHighlight(char)
+		end
+	end)
+end)
+
+--// CLOSE
+CloseButton.MouseButton1Click:Connect(function()
+	removeAllHighlights()
+	ScreenGui:Destroy()
+	script:Destroy()
+end)
